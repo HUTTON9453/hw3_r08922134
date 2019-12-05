@@ -1,22 +1,15 @@
 #include <stdio.h>
 #include "Ngram.h"
+#include "VocabMap.h"
+#include "LM.h"
 #include "File.h"
 #include "Vocab.h" 
 #include "Prob.h"
 #include "iconv.h"
-#include <map>
-#include <vector>
-#include <string>
 
-struct cmp_str
-{
-    bool operator()(char const *a, char const *b)
-    {
-        return strcmp(a, b) < 0;
-    }
-};
 
-void big6toutf8(char* inbuf){
+
+void big5toutf8(char* inbuf){
 	iconv_t cd = iconv_open("UTF-8","BIG5");	
 	char outbuf[1024];
 	char *tmpin = inbuf;
@@ -26,7 +19,7 @@ void big6toutf8(char* inbuf){
 	size_t ret = iconv (cd, &tmpin, &insize, &tmpout, &outsize);
 	printf("inbuf=%s, outbuf=%s\n", inbuf, outbuf);
 }
-void bigram_viterbi(char* output_filename, char* seg_filename, Ngram lm,Vocab voc, map zmap){
+void bigram_viterbi(char* output_filename, char* seg_filename, Ngram lm,Vocab voc, VocabMap map, Vocab ZhuYin, Vocab Big5){
 	//output File
 	FILE *fp;	
 	fp = fopen(output_filename,"w+");
@@ -50,12 +43,9 @@ void bigram_viterbi(char* output_filename, char* seg_filename, Ngram lm,Vocab vo
 		VocabIndex empty[] = {Vocab_None};
 		VocabIndex bi[] = {Vocab_None, Vocab_None};
 		//initialize viterbi
-		VocabMapIter iter(map, ZhuYin.getIndex(sentence[0]));
+		VocabMapIter iter(map, ZhuYin.getIndex("<s>"));
 		iter.init();
 		int size = 0;
-		vector<char*> vec;
-		vec = zmap.find(sentence[0]);
-		for(int it_i=)
 		while (iter.next(v_idx, p)) {
 			VocabIndex wid = voc.getIndex(Big5.getWord(v_idx));
 			LogP temp = lm.wordProb(wid, empty);//unigram
@@ -64,7 +54,7 @@ void bigram_viterbi(char* output_filename, char* seg_filename, Ngram lm,Vocab vo
 			}else{
 				deltap[0][size] = temp;
 			}
-			VidxGraph[0][size] = v_idx;
+			VidxGraph[0][size] = wid;
 			Backtrack[0][size] = -1; 
 			size++;
 		}
@@ -82,7 +72,8 @@ void bigram_viterbi(char* output_filename, char* seg_filename, Ngram lm,Vocab vo
 				// max(logP(q_i|W_(t-1)))+logW_(1:t-1)
 				LogP maxp = LogP_Zero;
 				for (int j = 0; j < CandiNum[i-1]; j++) {
-						VocabIndex last = voc.getIndex(Big5.getWord(VidxGraph[i-1][j]));
+						//VocabIndex last = voc.getIndex(Big5.getWord(VidxGraph[i-1][j]));
+						VocabIndex last = VidxGraph[i-1][j];
 						if(last == Vocab_None){
 							last = voc.getIndex(Vocab_Unknown);
 						}						
@@ -100,7 +91,7 @@ void bigram_viterbi(char* output_filename, char* seg_filename, Ngram lm,Vocab vo
 						}
 				}
 				deltap[i][size] = maxp;
-				VidxGraph[i][size] = v_idx;
+				VidxGraph[i][size] = wid;
 				/*if(deltap[i][size] > 0 && i==count-1){
 					finalmaxp = deltap[i][size];
 					finalmax = size;
@@ -121,7 +112,7 @@ void bigram_viterbi(char* output_filename, char* seg_filename, Ngram lm,Vocab vo
 		AnsPath[0] = "<s>";
 		AnsPath[count-1] = "</s>";
 		for (int i = count-1; i > 0; i--) {
-			AnsPath[i] = Big5.getWord(VidxGraph[i][finalmax]);
+			AnsPath[i] = voc.getWord(VidxGraph[i][finalmax]);
 			finalmax = Backtrack[i][finalmax];
 		}
 
@@ -312,26 +303,16 @@ int main(int argc, char *argv[]){
         lm.read(lmFile);
         lmFile.close();
 	/*load Map*/
-	map<char*,vector<char*>, cmp_str> zmap;
-	File mapFile("ZhuYin-Big5.map", "r");
-	char *line;
-	char word[2];
-	int line_len;
-	while(line = mapFile.getline()){
-		vector<char*> vec;
-		line_len = strlen(line);
-		for(int i = 3;i<line_len;i+=3){
-			vec.push_back(strncpy(word,line+i*sizeof(char),2));
-		}
-		strncpy(word,line,2);
-		zmap[word]=vec;
-	}
+	Vocab ZhuYin, Big5;
+	VocabMap map(ZhuYin, Big5);
+	File mapFile(map_filename, "r");
+	map.read(mapFile);
 	mapFile.close();
 
 	if(ngram_order==2){
-		bigram_viterbi(output_filename, seg_filename, lm, voc, zmap);
+		bigram_viterbi(output_filename, seg_filename, lm, voc, map, ZhuYin, Big5);
 	}else{
-		//trigram_viterbi(output_filename, seg_filename, lm, voc, zmap);
+		trigram_viterbi(output_filename, seg_filename, lm, voc, map, ZhuYin, Big5);
 	}
 
 	return 0;

@@ -9,8 +9,8 @@ vpath lib%.a $(SRIPATH)/lib/$(MACHINE_TYPE)
 vpath %.c $(SRC_PATH)
 vpath %.cpp $(SRC_PATH)
 
-TARGET = mydisambig
-SRC = mydisambig.cpp
+TARGET =test 
+SRC = test.cpp
 OBJ = $(SRC:.cpp=.o)
 FROM ?= Big5-ZhuYin.map
 TO ?= ZhuYin-Big5.map
